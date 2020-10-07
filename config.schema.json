@@ -1,0 +1,160 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "$id": "http://example.com/example.json",
+    "type": "object",
+    "title": "The root schema",
+    "description": "The root schema comprises the entire JSON document.",
+    "default": {},
+    "examples": [{
+        "bind": "0.0.0.0",
+        "max_connections": 1024,
+        "honeypots": [{
+                "name": "ssh",
+                "image": "linuxserver/openssh-server",
+                "options": [],
+                "port": 22,
+                "container_port": 2222
+            },
+            {
+                "name": "http",
+                "image": "nginx:alpine",
+                "options": [],
+                "port": 80,
+                "container_port": 80
+            }
+        ]
+    }],
+    "required": [
+        "bind",
+        "max_connections",
+        "honeypots"
+    ],
+    "properties": {
+        "bind": {
+            "$id": "#/properties/bind",
+            "type": "string",
+            "title": "The bind schema",
+            "description": "Server IP address to bind to.",
+            "default": "",
+            "examples": [
+                "0.0.0.0"
+            ]
+        },
+        "max_connections": {
+            "$id": "#/properties/max_connections",
+            "type": "integer",
+            "title": "The max_connections schema",
+            "description": "Maximum number of active connections regardless of honeypot type.",
+            "default": 0,
+            "examples": [
+                1024
+            ]
+        },
+        "honeypots": {
+            "$id": "#/properties/honeypots",
+            "type": "array",
+            "title": "The honeypots schema",
+            "description": "Honeypot images to serve for incoming connections.",
+            "default": [],
+            "examples": [
+                [{
+                        "name": "ssh",
+                        "image": "linuxserver/openssh-server",
+                        "options": [],
+                        "port": 22,
+                        "container_port": 2222
+                    },
+                    {
+                        "name": "http",
+                        "image": "nginx:alpine",
+                        "options": [],
+                        "port": 80,
+                        "container_port": 80
+                    }
+                ]
+            ],
+            "additionalItems": true,
+            "items": {
+                "$id": "#/properties/honeypots/items",
+                "anyOf": [{
+                    "$id": "#/properties/honeypots/items/anyOf/0",
+                    "type": "object",
+                    "title": "The first anyOf schema",
+                    "description": "Honeypot instance.",
+                    "default": {},
+                    "examples": [{
+                        "name": "ssh",
+                        "image": "linuxserver/openssh-server",
+                        "options": [],
+                        "port": 22,
+                        "container_port": 2222
+                    }],
+                    "required": [
+                        "name",
+                        "image",
+                        "port",
+                        "container_port"
+                    ],
+                    "properties": {
+                        "name": {
+                            "$id": "#/properties/honeypots/items/anyOf/0/properties/name",
+                            "type": "string",
+                            "title": "The name schema",
+                            "description": "Name of the service.",
+                            "default": "",
+                            "examples": [
+                                "ssh"
+                            ]
+                        },
+                        "image": {
+                            "$id": "#/properties/honeypots/items/anyOf/0/properties/image",
+                            "type": "string",
+                            "title": "The image schema",
+                            "description": "Docker image for the service.",
+                            "default": "",
+                            "examples": [
+                                "linuxserver/openssh-server"
+                            ]
+                        },
+                        "options": {
+                            "$id": "#/properties/honeypots/items/anyOf/0/properties/options",
+                            "type": "array",
+                            "title": "The options schema",
+                            "description": "Optional parameters when creating Docker container.",
+                            "default": [],
+                            "examples": [
+                                []
+                            ],
+                            "additionalItems": true,
+                            "items": {
+                                "$id": "#/properties/honeypots/items/anyOf/0/properties/options/items"
+                            }
+                        },
+                        "port": {
+                            "$id": "#/properties/honeypots/items/anyOf/0/properties/port",
+                            "type": "integer",
+                            "title": "The port schema",
+                            "description": "Port to listen on.",
+                            "default": 0,
+                            "examples": [
+                                22
+                            ]
+                        },
+                        "container_port": {
+                            "$id": "#/properties/honeypots/items/anyOf/0/properties/container_port",
+                            "type": "integer",
+                            "title": "The container_port schema",
+                            "description": "Port inside of the container.",
+                            "default": 0,
+                            "examples": [
+                                2222
+                            ]
+                        }
+                    },
+                    "additionalProperties": true
+                }]
+            }
+        }
+    },
+    "additionalProperties": true
+}

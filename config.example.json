@@ -1,0 +1,17 @@
+{
+    "bind": "0.0.0.0",
+    "max_connections": 1024,
+    "honeypots": [{
+        "name": "ssh",
+        "image": "linuxserver/openssh-server",
+        "options": [],
+        "port": 22,
+        "container_port": 2222
+    }, {
+        "name": "http",
+        "image": "nginx:alpine",
+        "options": [],
+        "port": 80,
+        "container_port": 80
+    }]
+}
