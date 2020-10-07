@@ -108,7 +108,7 @@ def init():
 #   Argument parsing   #
 ########################
 
-
+sys.argv.pop()
 for arg in sys.argv:
 
     if '--help' in sys.argv or '-h' in sys.argv:
