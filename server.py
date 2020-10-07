@@ -1,6 +1,7 @@
 import json
 from jsonschema import validate
 import os
+import sys
 from termcolor import colored, cprint
 import uuid
 import logging
@@ -17,6 +18,7 @@ handler.setFormatter(logging.Formatter(
     '%(name)s: [%(levelname)s] %(message)s'
 ))
 logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 #####################
 #       Helpers     #
@@ -100,3 +102,24 @@ def init():
     debug(_DOCKER_IMAGES)
 
     # pull docker images
+
+
+########################
+#   Argument parsing   #
+########################
+
+
+for arg in sys.argv:
+
+    if '--help' in sys.argv or '-h' in sys.argv:
+        printHelp()
+
+    # enable debugging
+    elif '--debug' in sys.argv or '-D' in sys.argv:
+        _DEBUG = True
+        logger.setLevel(logging.DEBUG)
+
+    else:
+        printHelp()
+
+init()
