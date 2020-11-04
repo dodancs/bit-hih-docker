@@ -8,17 +8,41 @@
     "examples": [{
         "bind": "0.0.0.0",
         "max_connections": 1024,
+        "ports_range": [
+            12000,
+            16000
+        ],
         "honeypots": [{
                 "name": "ssh",
-                "image": "linuxserver/openssh-server",
-                "options": [],
+                "image": "linuxserver/openssh-server:latest",
+                "options": {
+                    "environment": [
+                        "HTTP_PROXY=localhost:3128"
+                    ],
+                    "command": [
+                        "echo",
+                        "hello"
+                    ],
+                    "network_mode": "bridge",
+                    "ports": {
+                        "2222/tcp": "3333"
+                    },
+                    "read_only": true,
+                    "user": "www-data",
+                    "volumes": {
+                        "/data": {
+                            "bind": "/mnt/vol1",
+                            "mode": "rw"
+                        }
+                    }
+                },
                 "port": 22,
                 "container_port": 2222
             },
             {
                 "name": "http",
                 "image": "nginx:alpine",
-                "options": [],
+                "options": {},
                 "port": 80,
                 "container_port": 80
             }
@@ -27,6 +51,7 @@
     "required": [
         "bind",
         "max_connections",
+        "ports_range",
         "honeypots"
     ],
     "properties": {
@@ -50,6 +75,34 @@
                 1024
             ]
         },
+        "ports_range": {
+            "$id": "#/properties/ports_range",
+            "type": "array",
+            "title": "The ports_range schema",
+            "description": "Port range to select from when creating honeypots (min, max).",
+            "default": [],
+            "examples": [
+                [
+                    12000,
+                    16000
+                ]
+            ],
+            "additionalItems": true,
+            "items": {
+                "$id": "#/properties/ports_range/items",
+                "anyOf": [{
+                    "$id": "#/properties/ports_range/items/anyOf/0",
+                    "type": "integer",
+                    "title": "The ports schema",
+                    "description": "Port numbers from a valid unused range.",
+                    "default": 0,
+                    "examples": [
+                        12000,
+                        16000
+                    ]
+                }]
+            }
+        },
         "honeypots": {
             "$id": "#/properties/honeypots",
             "type": "array",
@@ -59,15 +112,35 @@
             "examples": [
                 [{
                         "name": "ssh",
-                        "image": "linuxserver/openssh-server",
-                        "options": [],
+                        "image": "linuxserver/openssh-server:latest",
+                        "options": {
+                            "environment": [
+                                "HTTP_PROXY=localhost:3128"
+                            ],
+                            "command": [
+                                "echo",
+                                "hello"
+                            ],
+                            "network_mode": "bridge",
+                            "ports": {
+                                "2222/tcp": "3333"
+                            },
+                            "read_only": true,
+                            "user": "www-data",
+                            "volumes": {
+                                "/data": {
+                                    "bind": "/mnt/vol1",
+                                    "mode": "rw"
+                                }
+                            }
+                        },
                         "port": 22,
                         "container_port": 2222
                     },
                     {
                         "name": "http",
                         "image": "nginx:alpine",
-                        "options": [],
+                        "options": {},
                         "port": 80,
                         "container_port": 80
                     }
@@ -79,13 +152,33 @@
                 "anyOf": [{
                     "$id": "#/properties/honeypots/items/anyOf/0",
                     "type": "object",
-                    "title": "The first anyOf schema",
+                    "title": "The honeypot schema",
                     "description": "Honeypot instance.",
                     "default": {},
                     "examples": [{
                         "name": "ssh",
-                        "image": "linuxserver/openssh-server",
-                        "options": [],
+                        "image": "linuxserver/openssh-server:latest",
+                        "options": {
+                            "environment": [
+                                "HTTP_PROXY=localhost:3128"
+                            ],
+                            "command": [
+                                "echo",
+                                "hello"
+                            ],
+                            "network_mode": "bridge",
+                            "ports": {
+                                "2222/tcp": "3333"
+                            },
+                            "read_only": true,
+                            "user": "www-data",
+                            "volumes": {
+                                "/data": {
+                                    "bind": "/mnt/vol1",
+                                    "mode": "rw"
+                                }
+                            }
+                        },
                         "port": 22,
                         "container_port": 2222
                     }],
@@ -113,22 +206,160 @@
                             "description": "Docker image for the service.",
                             "default": "",
                             "examples": [
-                                "linuxserver/openssh-server"
+                                "linuxserver/openssh-server:latest"
                             ]
                         },
                         "options": {
                             "$id": "#/properties/honeypots/items/anyOf/0/properties/options",
-                            "type": "array",
+                            "type": "object",
                             "title": "The options schema",
-                            "description": "Optional parameters when creating Docker container.",
-                            "default": [],
-                            "examples": [
-                                []
-                            ],
-                            "additionalItems": true,
-                            "items": {
-                                "$id": "#/properties/honeypots/items/anyOf/0/properties/options/items"
-                            }
+                            "description": "Container options.",
+                            "default": {},
+                            "examples": [{
+                                "environment": [
+                                    "HTTP_PROXY=localhost:3128"
+                                ],
+                                "command": [
+                                    "echo",
+                                    "hello"
+                                ],
+                                "network_mode": "bridge",
+                                "ports": {
+                                    "2222/tcp": "3333"
+                                },
+                                "read_only": true,
+                                "user": "www-data",
+                                "volumes": {
+                                    "/data": {
+                                        "bind": "/mnt/vol1",
+                                        "mode": "rw"
+                                    }
+                                }
+                            }],
+                            "required": [],
+                            "properties": {
+                                "environment": {
+                                    "$id": "#/properties/honeypots/items/anyOf/0/properties/options/properties/environment",
+                                    "type": "array",
+                                    "title": "The environment schema",
+                                    "description": "Evironment variables.",
+                                    "default": [],
+                                    "examples": [
+                                        [
+                                            "HTTP_PROXY=localhost:3128"
+                                        ]
+                                    ],
+                                    "additionalItems": true,
+                                    "items": {
+                                        "$id": "#/properties/honeypots/items/anyOf/0/properties/options/properties/environment/items",
+                                        "anyOf": [{
+                                            "$id": "#/properties/honeypots/items/anyOf/0/properties/options/properties/environment/items/anyOf/0",
+                                            "type": "string",
+                                            "title": "The environment variable schema",
+                                            "description": "Each environment variable has the syntax of VARIABLE=value.",
+                                            "default": "",
+                                            "examples": [
+                                                "HTTP_PROXY=localhost:3128"
+                                            ]
+                                        }]
+                                    }
+                                },
+                                "command": {
+                                    "$id": "#/properties/honeypots/items/anyOf/0/properties/options/properties/command",
+                                    "type": "array",
+                                    "title": "The command schema",
+                                    "description": "The command to run in the container.",
+                                    "default": [],
+                                    "examples": [
+                                        [
+                                            "echo",
+                                            "hello"
+                                        ]
+                                    ],
+                                    "additionalItems": true,
+                                    "items": {
+                                        "$id": "#/properties/honeypots/items/anyOf/0/properties/options/properties/command/items",
+                                        "anyOf": [{
+                                            "$id": "#/properties/honeypots/items/anyOf/0/properties/options/properties/command/items/anyOf/0",
+                                            "type": "string",
+                                            "title": "The command schema",
+                                            "description": "Set of commands and arguments to execute.",
+                                            "default": "",
+                                            "examples": [
+                                                "echo",
+                                                "hello"
+                                            ]
+                                        }]
+                                    }
+                                },
+                                "network": {
+                                    "$id": "#/properties/honeypots/items/anyOf/0/properties/options/properties/network",
+                                    "type": "string",
+                                    "title": "The network schema",
+                                    "description": "Name of the Docker network. Incompatible with network_mode.",
+                                    "default": "",
+                                    "examples": [
+                                        "my_network"
+                                    ]
+                                },
+                                "network_mode": {
+                                    "$id": "#/properties/honeypots/items/anyOf/0/properties/options/properties/network_mode",
+                                    "type": "string",
+                                    "title": "The network_mode schema",
+                                    "description": "Type of network to create/attach to the container. Incompatible with network.",
+                                    "default": "",
+                                    "examples": [
+                                        "bridge"
+                                    ]
+                                },
+                                "ports": {
+                                    "$id": "#/properties/honeypots/items/anyOf/0/properties/options/properties/ports",
+                                    "type": "object",
+                                    "title": "The ports schema",
+                                    "description": "Additional port exposure list.",
+                                    "default": {},
+                                    "examples": [{
+                                        "2222/tcp": "3333"
+                                    }],
+                                    "required": [],
+                                    "additionalProperties": true
+                                },
+                                "read_only": {
+                                    "$id": "#/properties/honeypots/items/anyOf/0/properties/options/properties/read_only",
+                                    "type": "boolean",
+                                    "title": "The read_only schema",
+                                    "description": "Mount the container’s root filesystem as read only.",
+                                    "default": false,
+                                    "examples": [
+                                        true
+                                    ]
+                                },
+                                "user": {
+                                    "$id": "#/properties/honeypots/items/anyOf/0/properties/options/properties/user",
+                                    "type": "string",
+                                    "title": "The user schema",
+                                    "description": "Username or UID to run commands as inside the container.",
+                                    "default": "",
+                                    "examples": [
+                                        "www-data"
+                                    ]
+                                },
+                                "volumes": {
+                                    "$id": "#/properties/honeypots/items/anyOf/0/properties/options/properties/volumes",
+                                    "type": "object",
+                                    "title": "The volumes schema",
+                                    "description": "A dictionary to configure volumes mounted inside the container. The key is either the host path or a volume name, and the value is a dictionary specifying the path and permission mode.",
+                                    "default": {},
+                                    "examples": [{
+                                        "/data": {
+                                            "bind": "/mnt/vol1",
+                                            "mode": "rw"
+                                        }
+                                    }],
+                                    "additionalProperties": true
+                                }
+                            },
+                            "additionalProperties": true
                         },
                         "port": {
                             "$id": "#/properties/honeypots/items/anyOf/0/properties/port",

@@ -1,16 +1,33 @@
 {
     "bind": "0.0.0.0",
     "max_connections": 1024,
+    "ports_range": [12000, 16000],
     "honeypots": [{
         "name": "ssh",
-        "image": "linuxserver/openssh-server",
-        "options": [],
+        "image": "linuxserver/openssh-server:latest",
+        "options": {
+            "environment": [
+                "HTTP_PROXY=localhost:3128"
+            ],
+            "command": [
+                "echo", "hello"
+            ],
+            "network_mode": "bridge",
+            "ports": {
+                "2222/tcp": "3333"
+            },
+            "read_only": true,
+            "user": "guest",
+            "volumes": {
+                "/data": { "bind": "/mnt/vol1", "mode": "rw" }
+            }
+        },
         "port": 22,
         "container_port": 2222
     }, {
         "name": "http",
         "image": "nginx:alpine",
-        "options": [],
+        "options": {},
         "port": 80,
         "container_port": 80
     }]
