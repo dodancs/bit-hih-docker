@@ -41,11 +41,9 @@ _HOST = None  # bind host
 _DOCKER_CLIENT = None  # Docker client
 _DOCKER_IMAGES = []  # all docker images used
 _FORCE_PULL = False  # dorce pull fresh docker images
-_SESSIONS = {}  # connected sessions
+_CONTAINERS = []  # running containers
 _SERVER_SOCKETS = []  # running servers
 _SOCKETS = []  # client sockets
-_PORTS_USED = []  # used local ports
-_PORTS_LOCK = None  # lock for multithreaded access
 _THREADS = []  # all threads
 
 
@@ -90,9 +88,9 @@ def Diff(li1, li2):
 
 
 def stopAll(signal, frame):
-    global _SERVER_SOCKETS, _SESSIONS, _DOCKER_CLIENT, _THREADS
+    global _SERVER_SOCKETS, _CONTAINERS, _DOCKER_CLIENT, _THREADS
     info('Stopping all services...')
-    for i in _SESSIONS.keys():
+    for i in _CONTAINERS:
         try:
             h = _DOCKER_CLIENT.containers.get(i)
             h.stop()
@@ -120,12 +118,6 @@ class CannotBindPort(Exception):
         self.honeypot = honeypot
         self.message = 'Cannot bind local port \'{}\' - already in use!'.format(
             honeypot['port'])
-        super().__init__(self.message)
-
-
-class NoPortsAvailable(Exception):
-    def __init__(self):
-        self.message = 'No more ports available! Cannot start honeypot.'.format()
         super().__init__(self.message)
 
 ########################
@@ -164,12 +156,10 @@ def loadConfig():
 
 
 def init():
-    global _CONFIG, _DOCKER_IMAGES, _DOCKER_CLIENT, _HOST, _FORCE_PULL, _PORTS_LOCK
+    global _CONFIG, _DOCKER_IMAGES, _DOCKER_CLIENT, _HOST, _FORCE_PULL
 
     signal.signal(signal.SIGTERM, stopAll)
     signal.signal(signal.SIGINT, stopAll)
-
-    _PORTS_LOCK = threading.Lock()
 
     # initialize Docker connector
     _DOCKER_CLIENT = docker.from_env()
@@ -261,7 +251,7 @@ def waitForConnection(honeypot, s):
 
 
 def dataTransfer(honeypot, h_id, local_address, src, dst, direction):
-    global _DOCKER_CLIENT, _PORTS_USED, _SESSIONS
+    global _DOCKER_CLIENT
 
     try:
         src_name = src.getsockname()
@@ -284,7 +274,6 @@ def dataTransfer(honeypot, h_id, local_address, src, dst, direction):
 
     try:
         h = _DOCKER_CLIENT.containers.get(h_id)
-        _PORTS_USED.remove(_SESSIONS[h_id])
         h.stop()
         debug('Stopped \'{}\' container for host: {} - {}.'.format(
             honeypot['name'], local_address[0], h_id))
@@ -300,25 +289,8 @@ def dataHandler(buffer):
 #  Honeypot management #
 ########################
 
-
-def getPort():
-    global _CONFIG, _PORTS_USED, _PORTS_LOCK
-    _PORTS_LOCK.acquire()
-    available = [*range(_CONFIG['ports_range'][0],
-                        _CONFIG['ports_range'][1] + 1, 1)]
-    available = Diff(available, _PORTS_USED)
-
-    if (len(available) > 0):
-        _PORTS_USED.append(available[0])
-        _PORTS_LOCK.release()
-        return available[0]
-    else:
-        _PORTS_LOCK.release()
-        raise NoPortsAvailable()
-
-
 def launchHoneypot(honeypot, local_socket, local_address):
-    global _DOCKER_CLIENT, _SESSIONS, _CONFIG_OVERRIDE_BIND, _THREADS
+    global _DOCKER_CLIENT, _CONTAINERS, _CONFIG_OVERRIDE_BIND, _THREADS
 
     try:
         h_command = command = honeypot['options']['command']
@@ -341,7 +313,6 @@ def launchHoneypot(honeypot, local_socket, local_address):
         h_network_mode = None
 
     h_ports = {}
-    h_ports[honeypot['container_port']] = (_HOST, getPort())
     try:
         h_ports.update(command=honeypot['options']['ports'])
     except:
@@ -378,19 +349,17 @@ def launchHoneypot(honeypot, local_socket, local_address):
     hh = _DOCKER_CLIENT.containers.get(h.id)
 
     # print(hh.attrs['NetworkSettings'])
-    # h_ip = hh.attrs['NetworkSettings']['IPAddress']
-    h_port = h_ports[honeypot['container_port']][1]
+    h_ip = hh.attrs['NetworkSettings']['IPAddress']
 
     # print('Docker IP: {}:{}'.format(h_ip, h_port))
 
-    debug('Started \'{}\' container on port {} for host: {} - {}.'.format(
-        honeypot['name'], h_port, local_address[0], h.id))
+    _CONTAINERS.append(h.id)
 
-    _SESSIONS[h.id] = h_port
-    print(_SESSIONS)
+    debug('Started \'{}\' container on port {} for host: {} - {}.'.format(
+        honeypot['name'], honeypot['container_port'], local_address[0], h.id))
 
     remote_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    remote_socket.connect(('127.0.0.1', h_port))
+    remote_socket.connect((h_ip, honeypot['container_port']))
     _SOCKETS.append(remote_socket)
 
     s = threading.Thread(target=dataTransfer, args=(
