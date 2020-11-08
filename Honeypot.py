@@ -6,6 +6,7 @@ from Utils import CannotBindPort, debug, info, error
 
 class Honeypot:
     _SESSIONS = [] # list of [container_id, client_socket, honeypot_socket, c>h_thread, h>c_thread]
+    _CONTAINERS = [] # list of container objects
     _SERVER_SOCKET = None # honeypot server listening socket
     _SERVER_THREAD = None # server thread
     _CONFIG = None # configuration
@@ -93,6 +94,7 @@ class Honeypot:
             
             # start a new container
             container = self.launchContainer()
+            self._CONTAINERS.append(container)
 
             # get container IP address
             ip = container.attrs['NetworkSettings']['IPAddress']
@@ -216,6 +218,12 @@ class Honeypot:
             try:
                 c = self._DOCKER_CLIENT.containers.get(session[0])
                 c.stop()
+            except:
+                pass
+
+        for container in self._CONTAINERS:
+            try:
+                container.stop()
             except:
                 pass
         
