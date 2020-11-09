@@ -19,6 +19,7 @@ class Honeypot:
         self._CONFIG = config
         self._HONEYPOT = honeypot
         self._DOCKER_CLIENT = docker_client
+        self._MUTEX = threading.Lock()
 
         try:
             self._CONTAINER_CONFIG['command'] = self._HONEYPOT['options']['command']
@@ -190,10 +191,15 @@ class Honeypot:
         return buffer
 
     def stopSession(self, container):
+        # lock access to sessions
+        if self._MUTEX.locked():
+            return
+
         # check if session was already terminated
         try:
             self._SESSIONS[container][0]
         except:
+            self._MUTEX.release()
             return
 
         # get sockets
@@ -227,6 +233,9 @@ class Honeypot:
 
 
     def kill(self):
+        # lock access to sessions
+        self._MUTEX.acquire(blocking=True)
+
         for session in self._SESSIONS:
             # close sockets
             try:
@@ -260,4 +269,6 @@ class Honeypot:
             pass
 
         self._SERVER_THREAD.join()
+
+        self._MUTEX.release()
 

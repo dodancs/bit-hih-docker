@@ -20,8 +20,12 @@ _FORCE_PULL = False  # dorce pull fresh docker images
 _HONEYPOTS = [] # active honeypots
 
 def stopAll(signal, frame):
+    info('Stopping all servers...')
+    
     for honeypot in _HONEYPOTS:
         honeypot.kill()
+
+    info('All servers stopped successfully.')
     exit(0)
 
 
