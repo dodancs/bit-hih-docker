@@ -2,6 +2,7 @@ from termcolor import colored, cprint
 import logging
 import logging.handlers
 import os
+import time
 
 _VERSION = '1.0.0'  # app version
 _DEBUG = False  # enable or disable debugging output
@@ -53,10 +54,21 @@ def printHelp():
     ', 'cyan')
     exit(1)
 
+
 def printVersion():
     global _VERSION
     cprint('HIH-Docker version {}'.format(_VERSION), 'cyan')
     exit(0)
+
+
+class Waiter:
+    timeout = 0.005
+
+    def wait(self):
+        time.sleep(self.timeout)
+        if self.timeout < 0.1:
+            self.timeout *= 2
+
 
 ########################
 #      Exceptions      #

@@ -2,10 +2,10 @@ import socket
 import threading
 import time
 import math
-from Utils import CannotBindPort, debug, info, error
+from Utils import CannotBindPort, debug, info, error, Waiter
 
 class Honeypot:
-    _SESSIONS = [] # list of [container_id, client_socket, honeypot_socket, c>h_thread, h>c_thread]
+    _SESSIONS = {} # dict of container : [client_socket, honeypot_socket, c>h_thread, h>c_thread]
     _CONTAINERS = [] # list of container objects
     _SERVER_SOCKET = None # honeypot server listening socket
     _SERVER_THREAD = None # server thread
@@ -68,17 +68,17 @@ class Honeypot:
 
         # bind IP address and port
         self._SERVER_SOCKET.bind((self._CONFIG['bind'], self._HONEYPOT['port']))
-        debug('Binding IP address {} and port {} to honeypot for {}'.format(str(self._CONFIG['bind']), str(self._HONEYPOT['port']), self._HONEYPOT['name']))
+        debug('[{}] Binding IP address {} and port {}.'.format(self._HONEYPOT['name'], str(self._CONFIG['bind']), str(self._HONEYPOT['port'])))
 
         try:
             # start socket and set maximum number of connections
             conns = math.floor(self._CONFIG['max_connections'] / self._CONFIG['honeypots_num'])
-            debug('Starting socket with {} maximum connections'.format(conns))
+            debug('[{}] Starting socket with {} maximum connections'.format(self._HONEYPOT['name'], conns))
             self._SERVER_SOCKET.listen(conns)
         except:
             raise CannotBindPort(self._HONEYPOT)
 
-        info('Server for \'{}\' honeypot has started on {}.'.format(
+        info('[{}] Server for honeypot has started on {}.'.format(
             self._HONEYPOT['name'], str(self._CONFIG['bind']) + ':' + str(self._HONEYPOT['port'])))
 
         # start listener thread
@@ -86,9 +86,12 @@ class Honeypot:
         self._SERVER_THREAD.daemon = True
         self._SERVER_THREAD.start()
 
+        debug('[{}] Server listener thread has started.'.format(self._HONEYPOT['name']))
+
     # wait for socket connections
     def waitForConnection(self):
         while True:
+            debug('[{}] Waiting for connections...'.format(self._HONEYPOT['name']))
             client_socket, client_address = self._SERVER_SOCKET.accept()
             info('[{}] New connection from {}.'.format(self._HONEYPOT['name'], ':'.join(str(x) for x in client_address)))
             
@@ -103,18 +106,27 @@ class Honeypot:
             self._HONEYPOT['name'], container.id, ip, ':'.join(str(x) for x in client_address)))
 
             # open socket to container
-            honeypot_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            honeypot_socket.connect((ip, self._HONEYPOT['container_port']))
+            waiter = Waiter()
+            while True:
+                try:
+                    honeypot_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    honeypot_socket.connect((ip, self._HONEYPOT['container_port']))
+                    break
+                except:
+                    waiter.wait()
+
+            debug('[{}] Socket opened to container {}.'.format(
+            self._HONEYPOT['name'], container.id))
 
             # start data transfer threads
-            c_h = threading.Thread(target=self.dataTransfer, args=(client_socket, honeypot_socket))
-            h_c = threading.Thread(target=self.dataTransfer, args=(honeypot_socket, client_socket, True))
+            c_h = threading.Thread(target=self.dataTransfer, args=(container.id, client_socket, honeypot_socket))
+            h_c = threading.Thread(target=self.dataTransfer, args=(container.id, honeypot_socket, client_socket, True))
             c_h.daemon = True
             h_c.daemon = True
             c_h.start()
             h_c.start()
 
-            self._SESSIONS.append([container.id, client_socket, honeypot_socket, c_h, h_c])
+            self._SESSIONS[container.id] = [client_socket, honeypot_socket, c_h, h_c]
 
         # stop server socket
         try:
@@ -143,8 +155,10 @@ class Honeypot:
 
         return cc
 
-    def dataTransfer(self, source, destination, direction = False):
-        debug('[{}] Starting transfer thread {} {} {}.'.format(self._CONTAINER_CONFIG['name'], ':'.join(str(x) for x in source.getsockname()), '<-' if direction else '->', ':'.join(str(x) for x in destination.getsockname())))
+    def dataTransfer(self, container, source, destination, direction = False):
+        source_address = ':'.join(str(x) for x in source.getsockname())
+        destination_address = ':'.join(str(x) for x in destination.getsockname())
+        debug('[{}] Starting transfer thread {} {} {}.'.format(self._HONEYPOT['name'], source_address, '<-' if direction else '->', destination_address))
         try:
             while True:
                 # read 1024 bytes
@@ -156,51 +170,40 @@ class Honeypot:
         except:
             pass
 
-        debug('[{}] Stopped transfer thread {} {} {}.'.format(self._CONTAINER_CONFIG['name'], ':'.join(str(x) for x in source.getsockname()), '<-' if direction else '->', ':'.join(str(x) for x in destination.getsockname())))
+        debug('[{}] Stopped transfer thread {} {} {}.'.format(self._HONEYPOT['name'], source_address, '<-' if direction else '->', destination_address))
 
-        self.stopSockets(source, destination)
+        self.stopSession(container)
 
 
     def dataHandler(self, buffer):
         return buffer
 
-    def stopSockets(self, s1, s2):
-        container = None
-        source = None
-        destination = None
-        session = None
-
-        # remove session
-        for i in range(len(self._SESSIONS)):
-            if (self._SESSIONS[i][1] == s1 and self._SESSIONS[i][2] == s2) or (self._SESSIONS[i][2] == s1 and self._SESSIONS[i][1] == s2):
-                session = i
-                break
-
-        if session != None:
-            container = self._SESSIONS[session][0]
-            source = self._SESSIONS[session][1]
-            destination = self._SESSIONS[session][2]
+    def stopSession(self, container):
+        # everything gets triggered two times - for each communication direction
 
         # close sockets
         try:
-            s1.shutdown(socket.SHUT_RDWR)
-            s1.close()
-            s2.shutdown(socket.SHUT_RDWR)
-            s2.close()
-            info('[{}] Connection from {} closed.'.format(self._HONEYPOT['name'], ':'.join(str(x) for x in source.getsockname())))
+            self._SESSIONS[container][0].shutdown(socket.SHUT_RDWR)
+            self._SESSIONS[container][0].close()
+            self._SESSIONS[container][1].shutdown(socket.SHUT_RDWR)
+            self._SESSIONS[container][1].close()
         except:
             pass
+        debug('[{}] Sockets closed to container {}.'.format(self._HONEYPOT['name'], container))
 
+        # stop container
         try:
             c = self._DOCKER_CLIENT.containers.get(container)
             c.stop()
-            debug('[{}] Stopped container ({}) on host \'{}\' for {}.'.format(
-            self._HONEYPOT['name'], container, destination.getsockname()[0], ':'.join(str(x) for x in source.getsockname())))
+            debug('[{}] Stopped container {}.'.format(self._HONEYPOT['name'], container))
         except:
             pass
-        
-        if session != None:
-            del self._SESSIONS[session]
+
+        # remove session
+        try:
+            del self._SESSIONS[container]
+        except:
+            pass
 
     def kill(self):
         for session in self._SESSIONS:
