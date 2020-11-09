@@ -92,7 +92,12 @@ class Honeypot:
     def waitForConnection(self):
         while True:
             debug('[{}] Waiting for connections...'.format(self._HONEYPOT['name']))
-            client_socket, client_address = self._SERVER_SOCKET.accept()
+
+            try:
+                client_socket, client_address = self._SERVER_SOCKET.accept()
+            except:
+                break
+            
             info('[{}] New connection from {}.'.format(self._HONEYPOT['name'], ':'.join(str(x) for x in client_address)))
             
             # start a new container
@@ -158,7 +163,7 @@ class Honeypot:
     def dataTransfer(self, container, source, destination, direction = False):
         source_address = ':'.join(str(x) for x in source.getsockname())
         destination_address = ':'.join(str(x) for x in destination.getsockname())
-        debug('[{}] Starting transfer thread {} {} {}.'.format(self._HONEYPOT['name'], source_address, '<-' if direction else '->', destination_address))
+        debug('[{}] Starting transfer thread {} {} {}.'.format(self._HONEYPOT['name'], destination_address if direction else source_address, '<-' if direction else '->', source_address if direction else destination_address))
         try:
             while True:
                 # read 1024 bytes
@@ -170,34 +175,30 @@ class Honeypot:
         except:
             pass
 
-        debug('[{}] Stopped transfer thread {} {} {}.'.format(self._HONEYPOT['name'], source_address, '<-' if direction else '->', destination_address))
+        debug('[{}] Stopped transfer thread {} {} {}.'.format(self._HONEYPOT['name'], destination_address if direction else source_address, '<-' if direction else '->', source_address if direction else destination_address))
 
+        # stop the session
         self.stopSession(container)
+
+        # only write stopped message once
+        if direction:
+            info('[{}] Connection from {} ended.'.format(self._HONEYPOT['name'], source_address))
+
 
 
     def dataHandler(self, buffer):
         return buffer
 
     def stopSession(self, container):
-        # everything gets triggered two times - for each communication direction
-
-        # close sockets
+        # check if session was already terminated
         try:
-            self._SESSIONS[container][0].shutdown(socket.SHUT_RDWR)
-            self._SESSIONS[container][0].close()
-            self._SESSIONS[container][1].shutdown(socket.SHUT_RDWR)
-            self._SESSIONS[container][1].close()
+            self._SESSIONS[container][0]
         except:
-            pass
-        debug('[{}] Sockets closed to container {}.'.format(self._HONEYPOT['name'], container))
+            return
 
-        # stop container
-        try:
-            c = self._DOCKER_CLIENT.containers.get(container)
-            c.stop()
-            debug('[{}] Stopped container {}.'.format(self._HONEYPOT['name'], container))
-        except:
-            pass
+        # get sockets
+        s1 = self._SESSIONS[container][0]
+        s2 = self._SESSIONS[container][1]
 
         # remove session
         try:
@@ -205,28 +206,50 @@ class Honeypot:
         except:
             pass
 
+        # close sockets
+        try:
+            s1.shutdown(socket.SHUT_RDWR)
+            s1.close()
+            s2.shutdown(socket.SHUT_RDWR)
+            s2.close()
+        except:
+            pass
+        debug('[{}] Sockets closed to container {}.'.format(self._HONEYPOT['name'], container))
+
+        # stop container
+        try:
+            c = self._DOCKER_CLIENT.containers.get(container)
+            if c.status == 'running':
+                c.stop()
+                debug('[{}] Stopped container {}.'.format(self._HONEYPOT['name'], container))
+        except:
+            pass
+
+
     def kill(self):
         for session in self._SESSIONS:
             # close sockets
             try:
+                session[0].shutdown(socket.SHUT_RDWR)
+                session[0].close()
                 session[1].shutdown(socket.SHUT_RDWR)
                 session[1].close()
-                session[2].shutdown(socket.SHUT_RDWR)
-                session[2].close()
+                session[2].join()
                 session[3].join()
-                session[4].join()
             except:
                 pass
 
             try:
                 c = self._DOCKER_CLIENT.containers.get(session[0])
-                c.stop()
+                if c.status == 'running':
+                    c.stop()
             except:
                 pass
 
         for container in self._CONTAINERS:
             try:
-                container.stop()
+                if container.status == 'running':
+                    container.stop()
             except:
                 pass
         
