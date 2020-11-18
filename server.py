@@ -92,6 +92,10 @@ def init():
 
     info('Loaded {} honeypots.'.format(_CONFIG['honeypots_num']))
 
+    if _CONFIG['honeypots_num'] > _CONFIG['max_connections']:
+        error('Maximum number of connections too low!')
+        stopAll(1)
+
     debug('Docker images parsed from config: {}'.format(_DOCKER_IMAGES))
 
     # pull docker images
