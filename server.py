@@ -17,16 +17,21 @@ _CONFIG = None  # parsed configuration
 _DOCKER_CLIENT = None  # Docker client
 _DOCKER_IMAGES = []  # all docker images used
 _FORCE_PULL = False  # dorce pull fresh docker images
-_HONEYPOTS = [] # active honeypots
+_HONEYPOTS = []  # active honeypots
 
-def stopAll(signal, frame):
+
+def stopAll(exit_code):
     info('Stopping all servers...')
-    
+
     for honeypot in _HONEYPOTS:
         honeypot.kill()
 
     info('All servers stopped successfully.')
-    exit(0)
+    exit(exit_code)
+
+
+def killSignal(signal, frame):
+    stopAll(0)
 
 
 ########################
@@ -69,8 +74,8 @@ def loadConfig():
 def init():
     global _CONFIG, _DOCKER_IMAGES, _DOCKER_CLIENT, _FORCE_PULL
 
-    signal.signal(signal.SIGTERM, stopAll)
-    signal.signal(signal.SIGINT, stopAll)
+    signal.signal(signal.SIGTERM, killSignal)
+    signal.signal(signal.SIGINT, killSignal)
 
     # initialize Docker connector
     _DOCKER_CLIENT = docker.from_env()
@@ -106,7 +111,11 @@ def init():
 
     # bind honeypot servers
     for honeypot in _CONFIG['honeypots']:
-        _HONEYPOTS.append(Honeypot(config=_CONFIG, honeypot=honeypot, docker_client=_DOCKER_CLIENT))
+        try:
+            _HONEYPOTS.append(Honeypot(config=_CONFIG, honeypot=honeypot, docker_client=_DOCKER_CLIENT))
+        except Exception as e:
+            error(e)
+            stopAll(1)
 
     while True:
         time.sleep(1)

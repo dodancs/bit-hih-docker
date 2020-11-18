@@ -2,7 +2,7 @@ import socket
 import threading
 import time
 import math
-from Utils import CannotBindPort, debug, info, error, Waiter
+from Utils import CannotBindPort, debug, info, error, Waiter, _DOCKER_LOG_CONFIG
 
 class Honeypot:
     _SESSIONS = {} # dict of container : [client_socket, honeypot_socket, c>h_thread, h>c_thread]
@@ -21,6 +21,7 @@ class Honeypot:
         self._DOCKER_CLIENT = docker_client
         self._MUTEX = threading.Lock()
 
+        # parse container options
         try:
             self._CONTAINER_CONFIG['command'] = self._HONEYPOT['options']['command']
         except:
@@ -68,8 +69,11 @@ class Honeypot:
         self._SERVER_SOCKET.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
         # bind IP address and port
-        self._SERVER_SOCKET.bind((self._CONFIG['bind'], self._HONEYPOT['port']))
-        debug('[{}] Binding IP address {} and port {}.'.format(self._HONEYPOT['name'], str(self._CONFIG['bind']), str(self._HONEYPOT['port'])))
+        try:
+            self._SERVER_SOCKET.bind((self._CONFIG['bind'], self._HONEYPOT['port']))
+            debug('[{}] Binding IP address {} and port {}.'.format(self._HONEYPOT['name'], str(self._CONFIG['bind']), str(self._HONEYPOT['port'])))
+        except Exception as e:
+            raise CannotBindPort(self._HONEYPOT, e.args[1])
 
         try:
             # start socket and set maximum number of connections
@@ -77,10 +81,9 @@ class Honeypot:
             debug('[{}] Starting socket with {} maximum connections'.format(self._HONEYPOT['name'], conns))
             self._SERVER_SOCKET.listen(conns)
         except:
-            raise CannotBindPort(self._HONEYPOT)
+            raise CannotBindPort(self._HONEYPOT, 'Already in use')
 
-        info('[{}] Server for honeypot has started on {}.'.format(
-            self._HONEYPOT['name'], str(self._CONFIG['bind']) + ':' + str(self._HONEYPOT['port'])))
+        info('[{}] Server for honeypot has started on {}.'.format(self._HONEYPOT['name'], str(self._CONFIG['bind']) + ':' + str(self._HONEYPOT['port'])))
 
         # start listener thread
         self._SERVER_THREAD = threading.Thread(target=self.waitForConnection)
@@ -121,8 +124,7 @@ class Honeypot:
                 except:
                     waiter.wait()
 
-            debug('[{}] Socket opened to container {}.'.format(
-            self._HONEYPOT['name'], container.id))
+            debug('[{}] Socket opened to container {}.'.format(self._HONEYPOT['name'], container.id))
 
             # start data transfer threads
             c_h = threading.Thread(target=self.dataTransfer, args=(container.id, client_socket, honeypot_socket))
@@ -149,6 +151,7 @@ class Honeypot:
             auto_remove=True,
             detach=True,
             environment=self._CONTAINER_CONFIG['environment'],
+            log_config=_DOCKER_LOG_CONFIG,
             network=self._CONTAINER_CONFIG['network'],
             network_mode=self._CONTAINER_CONFIG['network_mode'],
             read_only=self._CONTAINER_CONFIG['read_only'],
@@ -195,80 +198,80 @@ class Honeypot:
         if self._MUTEX.locked():
             return
 
-        # check if session was already terminated
-        try:
-            self._SESSIONS[container][0]
-        except:
-            self._MUTEX.release()
-            return
+        with self._MUTEX:
+            # check if session was already terminated
+            try:
+                self._SESSIONS[container][0]
+            except:
+                self._MUTEX.release()
+                return
 
-        # get sockets
-        s1 = self._SESSIONS[container][0]
-        s2 = self._SESSIONS[container][1]
+            # get sockets
+            s1 = self._SESSIONS[container][0]
+            s2 = self._SESSIONS[container][1]
 
-        # remove session
-        try:
-            del self._SESSIONS[container]
-        except:
-            pass
+            # remove session
+            try:
+                del self._SESSIONS[container]
+            except:
+                pass
 
-        # close sockets
-        try:
-            s1.shutdown(socket.SHUT_RDWR)
-            s1.close()
-            s2.shutdown(socket.SHUT_RDWR)
-            s2.close()
-        except:
-            pass
-        debug('[{}] Sockets closed to container {}.'.format(self._HONEYPOT['name'], container))
+            # close sockets
+            try:
+                s1.shutdown(socket.SHUT_RDWR)
+                s1.close()
+                s2.shutdown(socket.SHUT_RDWR)
+                s2.close()
+            except:
+                pass
+            debug('[{}] Sockets closed to container {}.'.format(self._HONEYPOT['name'], container))
 
-        # stop container
-        try:
-            c = self._DOCKER_CLIENT.containers.get(container)
-            if c.status == 'running':
-                c.stop()
-                debug('[{}] Stopped container {}.'.format(self._HONEYPOT['name'], container))
-        except:
-            pass
+            # stop container
+            try:
+                c = self._DOCKER_CLIENT.containers.get(container)
+                if c.status == 'running':
+                    c.stop()
+                    debug('[{}] Stopped container {}.'.format(self._HONEYPOT['name'], container))
+            except:
+                pass
 
 
     def kill(self):
+        info('[{}] Stopping.'.format(self._HONEYPOT['name']))
+
         # lock access to sessions
-        self._MUTEX.acquire(blocking=True)
+        with self._MUTEX:
+            for session in dict(self._SESSIONS):
+                # close sockets
+                try:
+                    session[0].shutdown(socket.SHUT_RDWR)
+                    session[0].close()
+                    session[1].shutdown(socket.SHUT_RDWR)
+                    session[1].close()
+                    session[2].join()
+                    session[3].join()
+                except:
+                    pass
 
-        for session in self._SESSIONS:
-            # close sockets
+                try:
+                    c = self._DOCKER_CLIENT.containers.get(session[0])
+                    if c.status == 'running':
+                        c.stop()
+                except:
+                    pass
+
+            for container in list(self._CONTAINERS):
+                try:
+                    if container.status == 'running':
+                        container.stop()
+                except:
+                    pass
+            
             try:
-                session[0].shutdown(socket.SHUT_RDWR)
-                session[0].close()
-                session[1].shutdown(socket.SHUT_RDWR)
-                session[1].close()
-                session[2].join()
-                session[3].join()
+                self._SERVER_SOCKET.shutdown(socket.SHUT_RDWR)
+                self._SERVER_SOCKET.close()
             except:
                 pass
 
-            try:
-                c = self._DOCKER_CLIENT.containers.get(session[0])
-                if c.status == 'running':
-                    c.stop()
-            except:
-                pass
-
-        for container in self._CONTAINERS:
-            try:
-                if container.status == 'running':
-                    container.stop()
-            except:
-                pass
-        
-        try:
-            self._SERVER_SOCKET.shutdown(socket.SHUT_RDWR)
-            self._SERVER_SOCKET.close()
-        except:
-            pass
-
-        self._SERVER_THREAD.join()
-
-        self._MUTEX.release()
+            self._SERVER_THREAD.join()
 

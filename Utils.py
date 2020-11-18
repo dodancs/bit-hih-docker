@@ -3,6 +3,7 @@ import logging
 import logging.handlers
 import os
 import time
+from docker.types import LogConfig
 
 _VERSION = '1.0.0'  # app version
 _DEBUG = False  # enable or disable debugging output
@@ -21,9 +22,13 @@ handler_linux.setFormatter(logging_format)
 logger.addHandler(handler_linux)
 logger.setLevel(logging.INFO)
 
+# Docker log config
+_DOCKER_LOG_CONFIG = LogConfig(type=LogConfig.types.SYSLOG, config={})
+
 ########################
 #         Utils        #
 ########################
+
 
 def info(message):
     cprint('[INFO]: %s' % message, 'white')
@@ -76,8 +81,7 @@ class Waiter:
 
 
 class CannotBindPort(Exception):
-    def __init__(self, honeypot):
+    def __init__(self, honeypot, reason):
         self.honeypot = honeypot
-        self.message = 'Cannot bind local port \'{}\' - already in use!'.format(
-            honeypot['port'])
+        self.message = 'Cannot bind local port \'{}\' - {}!'.format(honeypot['port'], reason)
         super().__init__(self.message)
