@@ -22,7 +22,7 @@ handler_linux.setFormatter(logging_format)
 logger.addHandler(handler_linux)
 
 # Docker log config
-_DOCKER_LOG_CONFIG = LogConfig(type=LogConfig.types.SYSLOG, config={'tag':_APP_NAME + '/{{.ID}}'})
+_DOCKER_LOG_CONFIG = LogConfig(type=LogConfig.types.SYSLOG, config={ 'tag': _APP_NAME + '/{{.ID}}' })
 
 ########################
 #         Utils        #
@@ -31,18 +31,18 @@ _DOCKER_LOG_CONFIG = LogConfig(type=LogConfig.types.SYSLOG, config={'tag':_APP_N
 
 def info(message):
     cprint('[INFO]: %s' % message, 'white')
-    logging.info(message)
+    logger.info(message)
 
 
 def debug(message):
     if _DEBUG:
         cprint('[DEBUG]: %s' % message, 'yellow')
-    logging.debug(message)
+    logger.debug(message)
 
 
 def error(message):
     cprint('[ERROR]: %s' % message, 'white', 'on_red')
-    logging.error(message)
+    logger.error(message)
 
 
 def printHelp():
