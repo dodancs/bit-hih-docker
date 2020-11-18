@@ -5,21 +5,18 @@ import math
 from Utils import CannotBindPort, debug, info, error, Waiter, _DOCKER_LOG_CONFIG
 
 class Honeypot:
-    _SESSIONS = {} # dict of container : [client_socket, honeypot_socket, c>h_thread, h>c_thread]
-    _CONTAINERS = [] # list of container objects
-    _SERVER_SOCKET = None # honeypot server listening socket
-    _SERVER_THREAD = None # server thread
-    _CONFIG = None # configuration
-    _CONTAINER_CONFIG = {} # docker container configuration
-    _HONEYPOT = None # honeypot configuration
-    _DOCKER_CLIENT = None # docker client
 
     # class constructor
     def __init__(self, config, honeypot, docker_client):
-        self._CONFIG = config
-        self._HONEYPOT = honeypot
-        self._DOCKER_CLIENT = docker_client
-        self._MUTEX = threading.Lock()
+        self._SESSIONS = {} # dict of container : [client_socket, honeypot_socket, c>h_thread, h>c_thread]
+        self._CONTAINERS = [] # list of container objects
+        self._SERVER_SOCKET = None # honeypot server listening socket
+        self._SERVER_THREAD = None # server thread
+        self._CONFIG = config# configuration
+        self._CONTAINER_CONFIG = {} # docker container configuration
+        self._HONEYPOT = honeypot # honeypot configuration
+        self._DOCKER_CLIENT = docker_client # docker client
+        self._MUTEX = threading.Lock() # session lock
 
         # parse container options
         try:
@@ -30,7 +27,7 @@ class Honeypot:
         try:
             self._CONTAINER_CONFIG['environment'] = self._HONEYPOT['options']['environment']
         except:
-            self._CONTAINER_CONFIG['environment'] = []
+            self._CONTAINER_CONFIG['environment'] = None
 
         try:
             self._CONTAINER_CONFIG['network'] = self._HONEYPOT['options']['network']
@@ -45,7 +42,7 @@ class Honeypot:
         try:
             self._CONTAINER_CONFIG['read_only'] = self._HONEYPOT['options']['read_only']
         except:
-            self._CONTAINER_CONFIG['read_only'] = False
+            self._CONTAINER_CONFIG['read_only'] = None
 
         try:
             self._CONTAINER_CONFIG['user'] = self._HONEYPOT['options']['user']
@@ -55,7 +52,7 @@ class Honeypot:
         try:
             self._CONTAINER_CONFIG['volumes'] = self._HONEYPOT['options']['volumes']
         except:
-            self._CONTAINER_CONFIG['volumes'] = {}
+            self._CONTAINER_CONFIG['volumes'] = None
 
         self.startService()
 
@@ -241,7 +238,7 @@ class Honeypot:
 
         # lock access to sessions
         with self._MUTEX:
-            for session in dict(self._SESSIONS):
+            for session in self._SESSIONS:
                 # close sockets
                 try:
                     session[0].shutdown(socket.SHUT_RDWR)
@@ -260,7 +257,7 @@ class Honeypot:
                 except:
                     pass
 
-            for container in list(self._CONTAINERS):
+            for container in self._CONTAINERS:
                 try:
                     if container.status == 'running':
                         container.stop()

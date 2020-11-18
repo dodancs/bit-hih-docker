@@ -125,6 +125,8 @@ def init():
 #   Argument parsing   #
 ########################
 
+Utils.logger.setLevel(logging.INFO)
+
 sys.argv.pop(0)
 while len(sys.argv) > 0:
     arg = sys.argv.pop(0)
@@ -138,7 +140,7 @@ while len(sys.argv) > 0:
     # enable debugging
     elif arg in ['--debug', '-d']:
         Utils._DEBUG = True
-        logger.setLevel(logging.DEBUG)
+        Utils.logger.setLevel(logging.DEBUG)
 
     elif arg in ['--config', '-c']:
         if len(sys.argv) < 1:

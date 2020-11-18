@@ -20,10 +20,9 @@ logging_format = logging.Formatter(
 handler_linux = logging.handlers.SysLogHandler(address='/dev/log')
 handler_linux.setFormatter(logging_format)
 logger.addHandler(handler_linux)
-logger.setLevel(logging.INFO)
 
 # Docker log config
-_DOCKER_LOG_CONFIG = LogConfig(type=LogConfig.types.SYSLOG, config={})
+_DOCKER_LOG_CONFIG = LogConfig(type=LogConfig.types.SYSLOG, config={'tag':_APP_NAME + '/{{.ID}}'})
 
 ########################
 #         Utils        #
