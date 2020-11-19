@@ -30,6 +30,11 @@ class Honeypot:
             self._CONTAINER_CONFIG['environment'] = None
 
         try:
+            self._CONTAINER_CONFIG['hostname'] = self._HONEYPOT['options']['hostname']
+        except:
+            self._CONTAINER_CONFIG['hostname'] = None
+
+        try:
             self._CONTAINER_CONFIG['network'] = self._HONEYPOT['options']['network']
         except:
             self._CONTAINER_CONFIG['network'] = None
@@ -101,38 +106,10 @@ class Honeypot:
             
             info('[{}] New connection from {}.'.format(self._HONEYPOT['name'], ':'.join(str(x) for x in client_address)))
             
-            # start a new container
-            container = self.launchContainer()
-            self._CONTAINERS.append(container)
-
-            # get container IP address
-            ip = container.attrs['NetworkSettings']['IPAddress']
-
-            debug('[{}] Started container ({}) on host \'{}\' for {}.'.format(
-            self._HONEYPOT['name'], container.id, ip, ':'.join(str(x) for x in client_address)))
-
-            # open socket to container
-            # waiter in main thread - this is blocking other connections from happening
-            waiter = Waiter()
-            while True:
-                try:
-                    honeypot_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    honeypot_socket.connect((ip, self._HONEYPOT['container_port']))
-                    break
-                except:
-                    waiter.wait()
-
-            debug('[{}] Socket opened to container {}.'.format(self._HONEYPOT['name'], container.id))
-
-            # start data transfer threads
-            c_h = threading.Thread(target=self.dataTransfer, args=(container.id, client_socket, honeypot_socket))
-            h_c = threading.Thread(target=self.dataTransfer, args=(container.id, honeypot_socket, client_socket, True))
-            c_h.daemon = True
-            h_c.daemon = True
-            c_h.start()
-            h_c.start()
-
-            self._SESSIONS[container.id] = [client_socket, honeypot_socket, c_h, h_c]
+            # finish processing connection without blocking new connections
+            process = threading.Thread(target=self.processConnection, args=(client_socket, client_address))
+            process.daemon = True
+            process.start()
 
         # stop server socket
         try:
@@ -140,6 +117,41 @@ class Honeypot:
             self._SERVER_SOCKET.close()
         except:
             pass
+
+    def processConnection(self, client_socket, client_address):
+        # start a new container
+        container = self.launchContainer()
+        with self._MUTEX:
+            self._CONTAINERS.append(container)
+
+        # get container IP address
+        ip = container.attrs['NetworkSettings']['IPAddress']
+
+        debug('[{}] Started container ({}) on host \'{}\' for {}.'.format(
+        self._HONEYPOT['name'], container.id, ip, ':'.join(str(x) for x in client_address)))
+
+        # open socket to container
+        waiter = Waiter()
+        while True:
+            try:
+                honeypot_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                honeypot_socket.connect((ip, self._HONEYPOT['container_port']))
+                break
+            except:
+                waiter.wait()
+
+        debug('[{}] Socket opened to container {}.'.format(self._HONEYPOT['name'], container.id))
+
+        # start data transfer threads
+        c_h = threading.Thread(target=self.dataTransfer, args=(container.id, client_socket, honeypot_socket))
+        h_c = threading.Thread(target=self.dataTransfer, args=(container.id, honeypot_socket, client_socket, True))
+        c_h.daemon = True
+        h_c.daemon = True
+        c_h.start()
+        h_c.start()
+
+        with self._MUTEX:
+            self._SESSIONS[container.id] = [client_socket, honeypot_socket, c_h, h_c]
 
     # launch service container for new connection
     def launchContainer(self):
@@ -149,6 +161,7 @@ class Honeypot:
             auto_remove=True,
             detach=True,
             environment=self._CONTAINER_CONFIG['environment'],
+            hostname=self._CONTAINER_CONFIG['hostname'],
             log_config=_DOCKER_LOG_CONFIG,
             network=self._CONTAINER_CONFIG['network'],
             network_mode=self._CONTAINER_CONFIG['network_mode'],

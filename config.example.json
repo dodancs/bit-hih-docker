@@ -11,6 +11,7 @@
             "command": [
                 "echo", "hello"
             ],
+            "hostname": "ubuntu-srv-1",
             "network_mode": "bridge",
             "read_only": true,
             "user": "guest",
@@ -23,7 +24,6 @@
     }, {
         "name": "http",
         "image": "nginx:alpine",
-        "options": {},
         "port": 80,
         "container_port": 80
     }]
