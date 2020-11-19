@@ -1,7 +1,6 @@
 {
     "bind": "0.0.0.0",
     "max_connections": 1024,
-    "ports_range": [12000, 16000],
     "honeypots": [{
         "name": "ssh",
         "image": "linuxserver/openssh-server:latest",
@@ -13,13 +12,10 @@
                 "echo", "hello"
             ],
             "network_mode": "bridge",
-            "ports": {
-                "2222/tcp": "3333"
-            },
             "read_only": true,
             "user": "guest",
             "volumes": {
-                "/data": { "bind": "/mnt/vol1", "mode": "rw" }
+                "/docker/host/path": { "bind": "/destination/in/container", "mode": "rw" }
             }
         },
         "port": 22,

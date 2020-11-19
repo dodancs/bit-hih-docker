@@ -112,6 +112,7 @@ class Honeypot:
             self._HONEYPOT['name'], container.id, ip, ':'.join(str(x) for x in client_address)))
 
             # open socket to container
+            # waiter in main thread - this is blocking other connections from happening
             waiter = Waiter()
             while True:
                 try:
