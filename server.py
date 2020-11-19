@@ -10,7 +10,7 @@ import time
 import itertools
 from Honeypot import Honeypot
 import Utils
-from Utils import debug, info, error, logging, printHelp, printVersion, logger
+from Utils import debug, info, error, logging, logger, printHelp, printVersion, logger
 
 _CONFIG_FILE = 'config.json'  # config file name
 _CONFIG = None  # parsed configuration
@@ -44,20 +44,23 @@ def loadConfig():
 
     info('Loading server configuration...')
 
+    # load configuration schema
     _CONFIG_SCHEMA = json.loads(open('config.schema.json').read())
 
+    # load configuration file
     try:
         _CONFIG = json.loads(open(_CONFIG_FILE).read())
     except Exception as e:
         error('Cannot open configuration file!')
-        logging.error(e)
+        logger.error(e)
         exit(1)
 
+    # validate configuration file
     try:
         validate(instance=_CONFIG, schema=_CONFIG_SCHEMA)
     except Exception as e:
         error('Server configuration is invalid!')
-        logging.error(e)
+        logger.error(e)
         exit(1)
 
     _CONFIG['honeypots_num'] = len(_CONFIG['honeypots'])
@@ -74,13 +77,13 @@ def loadConfig():
 def init():
     global _CONFIG, _DOCKER_IMAGES, _DOCKER_CLIENT, _FORCE_PULL
 
+    # create kill signal hooks
     signal.signal(signal.SIGTERM, killSignal)
     signal.signal(signal.SIGINT, killSignal)
 
     # initialize Docker connector
     _DOCKER_CLIENT = docker.from_env()
-    debug('List of running docker containers: {}'.format(
-        _DOCKER_CLIENT.containers.list()))
+    debug('List of running docker containers: {}'.format(_DOCKER_CLIENT.containers.list()))
 
     # initialize script
     loadConfig()
@@ -113,7 +116,7 @@ def init():
             info('Pulling {}...'.format(image))
             _DOCKER_CLIENT.images.pull(image)
 
-    # bind honeypot servers
+    # start honeypot servers
     for honeypot in _CONFIG['honeypots']:
         try:
             _HONEYPOTS.append(Honeypot(config=_CONFIG, honeypot=honeypot, docker_client=_DOCKER_CLIENT))

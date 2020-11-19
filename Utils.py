@@ -14,9 +14,7 @@ _APP_NAME = 'hih-docker'
 ########################
 
 logger = logging.getLogger(_APP_NAME)
-logging_format = logging.Formatter(
-    '%(name)s: [%(levelname)s] %(message)s'
-)
+logging_format = logging.Formatter('%(name)s: [%(levelname)s] %(message)s')
 handler_linux = logging.handlers.SysLogHandler(address='/dev/log')
 handler_linux.setFormatter(logging_format)
 logger.addHandler(handler_linux)

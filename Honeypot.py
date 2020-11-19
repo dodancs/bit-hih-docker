@@ -118,6 +118,7 @@ class Honeypot:
         except:
             pass
 
+    # wait for container to start and create data transfer sockets
     def processConnection(self, client_socket, client_address):
         # start a new container
         container = self.launchContainer()
@@ -175,10 +176,14 @@ class Honeypot:
 
         return cc
 
+    # socket data transferer
     def dataTransfer(self, container, source, destination, direction = False):
         source_address = ':'.join(str(x) for x in source.getsockname())
         destination_address = ':'.join(str(x) for x in destination.getsockname())
-        debug('[{}] Starting transfer thread {} {} {}.'.format(self._HONEYPOT['name'], destination_address if direction else source_address, '<-' if direction else '->', source_address if direction else destination_address))
+        direction_text = '{} {} {}'.format(destination_address, '<-', source_address) if direction else '{} {} {}'.format(source_address, '->', destination_address)
+        
+        debug('[{}] Starting transfer thread {}.'.format(self._HONEYPOT['name'], direction_text))
+        
         try:
             while True:
                 # read 1024 bytes
@@ -190,7 +195,7 @@ class Honeypot:
         except:
             pass
 
-        debug('[{}] Stopped transfer thread {} {} {}.'.format(self._HONEYPOT['name'], destination_address if direction else source_address, '<-' if direction else '->', source_address if direction else destination_address))
+        debug('[{}] Stopped transfer thread {}.'.format(self._HONEYPOT['name'], direction_text))
 
         # stop the session
         self.stopSession(container)
@@ -199,16 +204,14 @@ class Honeypot:
         if direction:
             info('[{}] Connection from {} ended.'.format(self._HONEYPOT['name'], source_address))
 
-
-
+    # data interceptor / follower
     def dataHandler(self, buffer):
         return buffer
 
+    # stop session and remove any orphans
     def stopSession(self, container):
-        # lock access to sessions
-        if self._MUTEX.locked():
-            return
 
+        # lock access to sessions
         with self._MUTEX:
             # check if session was already terminated
             try:
@@ -246,7 +249,7 @@ class Honeypot:
             except:
                 pass
 
-
+    # kill the honeypot service on SIGINT
     def kill(self):
         info('[{}] Stopping.'.format(self._HONEYPOT['name']))
 
@@ -264,6 +267,7 @@ class Honeypot:
                 except:
                     pass
 
+                # stop container
                 try:
                     c = self._DOCKER_CLIENT.containers.get(session[0])
                     if c.status == 'running':
@@ -271,6 +275,7 @@ class Honeypot:
                 except:
                     pass
 
+            # stop any orphaned containers
             for container in self._CONTAINERS:
                 try:
                     if container.status == 'running':
@@ -278,11 +283,13 @@ class Honeypot:
                 except:
                     pass
             
+            # stop server socket
             try:
                 self._SERVER_SOCKET.shutdown(socket.SHUT_RDWR)
                 self._SERVER_SOCKET.close()
             except:
                 pass
 
+            # stop server thread
             self._SERVER_THREAD.join()
 
