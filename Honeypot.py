@@ -122,8 +122,9 @@ class Honeypot:
     def processConnection(self, client_socket, client_address):
         # start a new container
         container = self.launchContainer()
-        with self._MUTEX:
-            self._CONTAINERS.append(container)
+        self._MUTEX.acquire()
+        self._CONTAINERS.append(container)
+        self._MUTEX.release()
 
         # get container IP address
         ip = container.attrs['NetworkSettings']['IPAddress']
@@ -151,8 +152,9 @@ class Honeypot:
         c_h.start()
         h_c.start()
 
-        with self._MUTEX:
-            self._SESSIONS[container.id] = [client_socket, honeypot_socket, c_h, h_c]
+        self._MUTEX.acquire()
+        self._SESSIONS[container.id] = [client_socket, honeypot_socket, c_h, h_c]
+        self._MUTEX.release()
 
     # launch service container for new connection
     def launchContainer(self):
@@ -212,84 +214,87 @@ class Honeypot:
     def stopSession(self, container):
 
         # lock access to sessions
-        with self._MUTEX:
-            # check if session was already terminated
-            try:
-                self._SESSIONS[container][0]
-            except:
-                self._MUTEX.release()
-                return
+        self._MUTEX.acquire()
+        # check if session was already terminated
+        try:
+            self._SESSIONS[container][0]
+        except:
+            self._MUTEX.release()
+            return
 
-            # get sockets
-            s1 = self._SESSIONS[container][0]
-            s2 = self._SESSIONS[container][1]
+        # get sockets
+        s1 = self._SESSIONS[container][0]
+        s2 = self._SESSIONS[container][1]
 
-            # remove session
-            try:
-                del self._SESSIONS[container]
-            except:
-                pass
+        # remove session
+        try:
+            del self._SESSIONS[container]
+        except:
+            pass
 
-            # close sockets
-            try:
-                s1.shutdown(socket.SHUT_RDWR)
-                s1.close()
-                s2.shutdown(socket.SHUT_RDWR)
-                s2.close()
-            except:
-                pass
-            debug('[{}] Sockets closed to container {}.'.format(self._HONEYPOT['name'], container))
+        # close sockets
+        try:
+            s1.shutdown(socket.SHUT_RDWR)
+            s1.close()
+            s2.shutdown(socket.SHUT_RDWR)
+            s2.close()
+        except:
+            pass
+        debug('[{}] Sockets closed to container {}.'.format(self._HONEYPOT['name'], container))
 
-            # stop container
-            try:
-                c = self._DOCKER_CLIENT.containers.get(container)
-                if c.status == 'running':
-                    c.stop()
-                    debug('[{}] Stopped container {}.'.format(self._HONEYPOT['name'], container))
-            except:
-                pass
+        self._MUTEX.release()
+
+        # stop container
+        try:
+            c = self._DOCKER_CLIENT.containers.get(container)
+            if c.status == 'running':
+                c.stop()
+                debug('[{}] Stopped container {}.'.format(self._HONEYPOT['name'], container))
+        except:
+            pass
 
     # kill the honeypot service on SIGINT
     def kill(self):
         info('[{}] Stopping.'.format(self._HONEYPOT['name']))
 
         # lock access to sessions
-        with self._MUTEX:
-            for session in self._SESSIONS:
-                # close sockets
-                try:
-                    session[0].shutdown(socket.SHUT_RDWR)
-                    session[0].close()
-                    session[1].shutdown(socket.SHUT_RDWR)
-                    session[1].close()
-                    session[2].join()
-                    session[3].join()
-                except:
-                    pass
-
-                # stop container
-                try:
-                    c = self._DOCKER_CLIENT.containers.get(session[0])
-                    if c.status == 'running':
-                        c.stop()
-                except:
-                    pass
-
-            # stop any orphaned containers
-            for container in self._CONTAINERS:
-                try:
-                    if container.status == 'running':
-                        container.stop()
-                except:
-                    pass
-            
-            # stop server socket
+        self._MUTEX.acquire()
+        for session in self._SESSIONS:
+            # close sockets
             try:
-                self._SERVER_SOCKET.shutdown(socket.SHUT_RDWR)
-                self._SERVER_SOCKET.close()
+                session[0].shutdown(socket.SHUT_RDWR)
+                session[0].close()
+                session[1].shutdown(socket.SHUT_RDWR)
+                session[1].close()
+                session[2].join()
+                session[3].join()
             except:
                 pass
 
-            # stop server thread
-            self._SERVER_THREAD.join()
+            # stop container
+            try:
+                c = self._DOCKER_CLIENT.containers.get(session[0])
+                if c.status == 'running':
+                    c.stop()
+            except:
+                pass
+
+        # stop any orphaned containers
+        for container in self._CONTAINERS:
+            try:
+                if container.status == 'running':
+                    container.stop()
+            except:
+                pass
+        
+        # stop server socket
+        try:
+            self._SERVER_SOCKET.shutdown(socket.SHUT_RDWR)
+            self._SERVER_SOCKET.close()
+        except:
+            pass
+
+        # stop server thread
+        self._SERVER_THREAD.join()
+        self._MUTEX.release()
 
